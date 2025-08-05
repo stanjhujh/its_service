@@ -5,18 +5,16 @@ from reward_function import reward
 
 # Generate action labels with improved strategy
 def generate_action_labels(long_profits, short_profits, indices, total_bars, MAX_PENALTY, K, is_test_set=False):
-    """Generate action labels with improved profit-based selection and balanced distribution"""
-    print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}: Generating improved action labels...")
+     print(f"Total bars: {total_bars}")
     
-    # Initialize labels array with No Trade (2)
-    labels = np.full(len(long_profits), 2)
+    labels = np.full(total_bars, 2)
     
-    # Create DataFrame for ranking with enhanced metrics
     profit_df = pd.DataFrame({
+        'index': indices,
         'long_profit': long_profits,
         'short_profit': short_profits,
-        'long_reward': [reward(0, lp, sp, MAX_PENALTY, K) for lp, sp in zip(long_profits, short_profits)],
-        'short_reward': [reward(1, lp, sp, MAX_PENALTY, K) for lp, sp in zip(long_profits, short_profits)]
+        'long_reward': [reward(0, lp, sp) for lp, sp in zip(long_profits, short_profits)],
+        'short_reward': [reward(1, lp, sp) for lp, sp in zip(long_profits, short_profits)]
     })
     
     # Calculate additional metrics for better selection
@@ -28,8 +26,6 @@ def generate_action_labels(long_profits, short_profits, indices, total_bars, MAX
                                              profit_df['short_profit'])
     
     # Enhanced selection criteria
-    # Use higher thresholds for better quality trades
-    min_profit_threshold = 35   # Increased from 30
     
     # Step 1: Select high-quality trades with multiple criteria
     long_candidates = profit_df[
@@ -57,46 +53,30 @@ def generate_action_labels(long_profits, short_profits, indices, total_bars, MAX
         short_candidates['short_profit_ratio'] * 0.3
     )
     
-    # Determine target distribution based on available profitable trades
-    total_bars = len(profit_df)
     available_long = len(long_candidates)
     available_short = len(short_candidates)
-    
-    # Adaptive target distribution based on available profitable trades, #### have to review that 
-    max_trade_ratio = 0.75  # Maximum 20% trades total
-    print (available_long , available_short , total_bars , max_trade_ratio)
-    if available_long + available_short < total_bars * max_trade_ratio:
-        # Use all available profitable trades
-        print(f'entry condition 1')
-        
-        target_long_trades = int(int(available_long) * 1)
-        target_short_trades = int(int(available_short) * 0.7)
-        
-        
-#         target_long_trades = min(available_long, int(total_bars * 1))
-#         target_short_trades = min(available_short, int(total_bars * 0.5))
-    else:
-        print(f'entry condition 2')
-        # Use standard 12.5% each
-        target_long_trades = int(total_bars * 1)
-        target_short_trades = int(total_bars * 1)
 
-    print(target_long_trades, target_short_trades)
+    print(f"available_long: {available_long}")
+    print(f"available_short: {available_short}")
+
+    # Calculate current trade ratios
+    long_ratio_data = available_long / total_bars if total_bars > 0 else 0
+    short_ratio_data = available_short / total_bars if total_bars > 0 else 0
+    total_trade_ratio = (available_long + available_short) / total_bars if total_bars > 0 else 0
+
+    print(f"long_ratio: {long_ratio}")
+    print(f"short_ratio: {short_ratio}")
+
+    print(f"total_trade_ratio: {total_trade_ratio}")
     
-    print(type(long_candidates),long_candidates.shape)
-    print(type(short_candidates),short_candidates.shape)
-    
-    print(target_long_trades)
-    print(target_short_trades)
     
     # Select top trades based on composite score
     if len(long_candidates) > 0:
-        final_long_indices = long_candidates.nlargest(target_long_trades, 'composite_score').index
+        final_long_indices = long_candidates.nlargest(target_long_trades highest 5% profit, 'composite_score').index
         labels[final_long_indices] = 0  # Long
     
     if len(short_candidates) > 0:
-        final_short_indices = short_candidates.nlargest(target_short_trades, 'composite_score').index
+        final_short_indices = short_candidates.nlargest(target_short_trades highest 5% profit, 'composite_score').index
         labels[final_short_indices] = 1  # Short
 
-    
     return labels

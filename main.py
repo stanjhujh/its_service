@@ -42,6 +42,9 @@ MAX_PENALTY = asset_data['maximum_drawdown']
 MAX_DRAWDOWN = asset_data['maximum_drawdown']                  
 POINTS_TO_MAX_DRAWDOWN = asset_data['points_to_maximum_drawdown']
 
+TARGET_PROFIT = asset_data['targer_profit']
+STOP_LOSS = asset_data['stoploss']
+
 print(asset_data)
 
 
@@ -86,7 +89,7 @@ Returns arrays of long profits, short profits, and valid indices.
 """
 
 # Calculate profits from descaled data
-long_profits, short_profits, valid_indices = calculate_profits(df, MIN_PRICE_RES, S_PER_POINT, MAX_DRAWDOWN)
+long_profits, short_profits, valid_indices = calculate_profits(df, MIN_PRICE_RES, S_PER_POINT, TARGET_PROFIT, STOP_LOSS)
 
 
 """

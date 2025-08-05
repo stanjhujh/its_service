@@ -22,6 +22,9 @@ def export_trading_data(df, feature_data_test, test_labels, test_valid_indices, 
         data = json.load(file)
     asset_data = data['assets'][SYMBOL]
     S_PER_POINT = asset_data['price_per_point']
+    MIN_PRICE_RES = asset_data['minimum_resolution_points']
+    TARGET_PROFIT = asset_data['targer_profit']
+    STOP_LOSS = asset_data['stoploss']
     
     # ===== EXPORT 1: RAW OHLC DATA (FOR ALL SIGNAL ROWS) =====
     print("Exporting raw OHLC data for all signal rows...")
@@ -91,17 +94,64 @@ def export_trading_data(df, feature_data_test, test_labels, test_valid_indices, 
         entry_datetime = df.iloc[test_idx + 1]['Date']  # Next bar
         entry_price = df.iloc[test_idx + 1]['Open']     # Open of next bar
         
-        # Exit occurs 6 bars AFTER the entry bar
-        exit_datetime = df.iloc[test_idx + 6]['Date']   # 5 bars after entry
-        exit_price = df.iloc[test_idx + 6]['Close']     # Close of 5th bar
+        # Dynamic exit logic - check each bar for stop loss/target profit
+        exit_bar = 6  # Default to hard exit at 6th bar
+        exit_reason = 'HARD_EXIT'  # Track why the trade exited
         
-        # Calculate base profit with proper multiplier
+        if predicted_signal in ['LONG', 'SHORT']:
+            # Check for early exits due to stop loss or target profit
+            for j in range(1, 7):
+                if test_idx + j >= len(df):
+                    break
+                    
+                close_tj = df.iloc[test_idx + j]['Close']
+                low_tj = df.iloc[test_idx + j]['Low']
+                high_tj = df.iloc[test_idx + j]['High']
+                
+                if predicted_signal == 'LONG':
+                    # Check long position drawdown (stop loss)
+                    long_drawdown = ((entry_price - low_tj) / MIN_PRICE_RES) * (S_PER_POINT * MIN_PRICE_RES)
+                    if long_drawdown >= STOP_LOSS:
+                        exit_bar = j
+                        exit_reason = 'STOP_LOSS'
+                        break
+                    
+                    # Check long position profit (target profit)
+                    long_profit_at_close = ((close_tj - entry_price) / MIN_PRICE_RES) * (S_PER_POINT * MIN_PRICE_RES)
+                    if long_profit_at_close >= TARGET_PROFIT:
+                        exit_bar = j
+                        exit_reason = 'TARGET_PROFIT'
+                        break
+                        
+                elif predicted_signal == 'SHORT':
+                    # Check short position drawdown (stop loss)
+                    short_drawdown = ((high_tj - entry_price) / MIN_PRICE_RES) * (S_PER_POINT * MIN_PRICE_RES)
+                    if short_drawdown >= STOP_LOSS:
+                        exit_bar = j
+                        exit_reason = 'STOP_LOSS'
+                        break
+                    
+                    # Check short position profit (target profit)
+                    short_profit_at_close = ((entry_price - close_tj) / MIN_PRICE_RES) * (S_PER_POINT * MIN_PRICE_RES)
+                    if short_profit_at_close >= TARGET_PROFIT:
+                        exit_bar = j
+                        exit_reason = 'TARGET_PROFIT'
+                        break
+        
+        # Set exit datetime and price based on determined exit bar
+        exit_datetime = df.iloc[test_idx + exit_bar]['Date']
+        exit_price = df.iloc[test_idx + exit_bar]['Close']
+        
+        # Calculate base profit with proper multiplier using the exact method specified
         if predicted_signal == 'LONG':
+            # Base Profit = (Exit Price - Entry Price) * $50.00/point
             base_profit = (exit_price - entry_price) * S_PER_POINT
         elif predicted_signal == 'SHORT':
+            # Base Profit = (Entry Price - Exit Price) * $50.00/point  
             base_profit = (entry_price - exit_price) * S_PER_POINT
         else:  # NO_TRADE
             base_profit = 0  # No profit for NO_TRADE
+            exit_reason = 'NO_TRADE'
             
         trade_signals.append({
             'Trade Signal': predicted_signal,
@@ -109,7 +159,9 @@ def export_trading_data(df, feature_data_test, test_labels, test_valid_indices, 
             'EntryPrice': entry_price,
             'ExitDateTime': exit_datetime,
             'ExitPrice': exit_price,
-            'BaseProfit': base_profit
+            'BaseProfit': base_profit,
+            'ExitBar': exit_bar,
+            'ExitReason': exit_reason
         })
     
     # Create DataFrame and save
