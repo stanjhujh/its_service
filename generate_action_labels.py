@@ -3,18 +3,34 @@ import pandas as pd
 from datetime import datetime
 from reward_function import reward
 
+min_profit_threshold = 30
+
 # Generate action labels with improved strategy
 def generate_action_labels(long_profits, short_profits, indices, total_bars, MAX_PENALTY, K, is_test_set=False):
-     print(f"Total bars: {total_bars}")
+    print(f"Total bars: {total_bars}")
     
     labels = np.full(total_bars, 2)
     
+    # Handle both full arrays and pre-filtered arrays
+    if len(long_profits) == len(indices):
+        valid_long_profits = long_profits
+        valid_short_profits = short_profits
+        print(f"Using pre-filtered profits array (size: {len(long_profits)})")
+    else:
+        valid_long_profits = long_profits[indices]
+        valid_short_profits = short_profits[indices]
+        print(f"Extracting profits from full array (size: {len(long_profits)} -> {len(indices)})")
+    
+    # ✅ CREATE INDEX MAPPING: Original indices -> Split indices
+    index_mapping = {original_idx: split_idx for split_idx, original_idx in enumerate(indices)}
+    
     profit_df = pd.DataFrame({
-        'index': indices,
-        'long_profit': long_profits,
-        'short_profit': short_profits,
-        'long_reward': [reward(0, lp, sp) for lp, sp in zip(long_profits, short_profits)],
-        'short_reward': [reward(1, lp, sp) for lp, sp in zip(long_profits, short_profits)]
+        'original_index': indices,
+        'split_index': range(len(indices)),  # Add split index for mapping
+        'long_profit': valid_long_profits,
+        'short_profit': valid_short_profits,
+        'long_reward': [reward(0, lp, sp) for lp, sp in zip(valid_long_profits, valid_short_profits)],
+        'short_reward': [reward(1, lp, sp) for lp, sp in zip(valid_long_profits, valid_short_profits)]
     })
     
     # Calculate additional metrics for better selection
@@ -63,20 +79,32 @@ def generate_action_labels(long_profits, short_profits, indices, total_bars, MAX
     long_ratio_data = available_long / total_bars if total_bars > 0 else 0
     short_ratio_data = available_short / total_bars if total_bars > 0 else 0
     total_trade_ratio = (available_long + available_short) / total_bars if total_bars > 0 else 0
-
-    print(f"long_ratio: {long_ratio}")
-    print(f"short_ratio: {short_ratio}")
+    
+    print(f"long_ratio_data: {long_ratio_data}")
+    print(f"short_ratio_data: {short_ratio_data}")
+    
 
     print(f"total_trade_ratio: {total_trade_ratio}")
-    
+   
+    target_long_trades = int(0.75*available_long)
+    target_short_trades = int(0.50*available_short)
     
     # Select top trades based on composite score
     if len(long_candidates) > 0:
-        final_long_indices = long_candidates.nlargest(target_long_trades highest 5% profit, 'composite_score').index
-        labels[final_long_indices] = 0  # Long
+        selected_long = long_candidates.nlargest(target_long_trades, 'composite_score')
+        # Convert original indices to split indices
+        final_long_split_indices = selected_long['split_index'].values
+        labels[final_long_split_indices] = 0  # Long
     
     if len(short_candidates) > 0:
-        final_short_indices = short_candidates.nlargest(target_short_trades highest 5% profit, 'composite_score').index
-        labels[final_short_indices] = 1  # Short
+        selected_short = short_candidates.nlargest(target_short_trades, 'composite_score')
+        # Convert original indices to split indices  
+        final_short_split_indices = selected_short['split_index'].values
+        labels[final_short_split_indices] = 1  # Short
 
+    unique_classes, counts = np.unique(labels, return_counts=True)
+    for cls, count in zip(unique_classes, counts):
+        print(f"Label {cls}: {count} trades")
+    
+    print(f"Total labels: {len(labels)}")
     return labels
